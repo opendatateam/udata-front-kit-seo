@@ -2,6 +2,7 @@ import os
 import email.utils
 
 from datetime import datetime, UTC
+from typing import TypedDict
 from xml.etree import ElementTree
 
 import boto3
@@ -16,21 +17,48 @@ ECOSPHERES_URL = (
 DATAGOUVFR_URL = f"https://{ENV}.data.gouv.fr/api"
 UNIVERSE_NAME = "ecospheres" if ENV == "demo" else "univers-ecospheres"
 
+INDICATEURS_ORG = "67884b4da4fca9c97bbef479"
+INDICATEURS_QUERY = {
+    "tag": "ecospheres-indicateurs",
+    "organization": INDICATEURS_ORG,
+}
+
 STATIC_URLS = [
     "/",
     "/bouquets",
+    "/indicators",
     "/about",
 ]
 
 
-def parse_http_date_with_tz(http_date_str):
+class SitemapUrl(TypedDict):
+    url: str
+    last_modified: datetime
+
+
+def parse_http_date_with_tz(http_date_str: str) -> datetime:
     dt = email.utils.parsedate_to_datetime(http_date_str)
     return dt.replace(tzinfo=UTC)
 
 
-def fetch_urls():
+def iter_pages(first_url: str, params: dict = {}):
+    """
+    Iterate through paginated API results.
+    """
+    url = first_url
+    while url:
+        r = requests.get(url, params=params)
+        r.raise_for_status()
+        data = r.json()
+
+        yield from data["data"]
+        url = data["next_page"]
+
+
+def fetch_urls() -> list[SitemapUrl]:
     results = []
 
+    # static urls
     for url in STATIC_URLS:
         page_url = f"{ECOSPHERES_URL}{url}"
         r = requests.get(page_url)
@@ -42,17 +70,20 @@ def fetch_urls():
             ),
         })
 
-    r = requests.get(f"{DATAGOUVFR_URL}/2/topics", params={
+    # bouquets
+    for bouquet in iter_pages(f"{DATAGOUVFR_URL}/2/topics/", params={
         "tag": UNIVERSE_NAME,
-    })
-    r.raise_for_status()
-    data = r.json()
-    assert data["next_page"] is None
-
-    for bouquet in data["data"]:
+    }):
         results.append({
             "url": f"{ECOSPHERES_URL}/bouquets/{bouquet['slug']}",
             "last_modified": datetime.fromisoformat(bouquet["last_modified"]),
+        })
+
+    # indicators
+    for indicator in iter_pages(f"{DATAGOUVFR_URL}/2/datasets/", params=INDICATEURS_QUERY):
+        results.append({
+            "url": f"{ECOSPHERES_URL}/indicators/{indicator['id']}",
+            "last_modified": datetime.fromisoformat(indicator["last_modified"]),
         })
 
     return results
@@ -77,7 +108,7 @@ def create_sitemap(urls, write=True) -> str:
         tree.write("dist/sitemap.xml")
         return ""
     else:
-        return ElementTree.tostring(tree.getroot(), encoding="unicode")
+        return ElementTree.tostring(tree.getroot(), encoding="unicode") # type: ignore (wrong stubs)
 
 
 def generate(write=True) -> str:
