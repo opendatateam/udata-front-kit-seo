@@ -1,34 +1,60 @@
 import os
+from dataclasses import dataclass
 from enum import StrEnum
 import email.utils
-import sys
 
 from datetime import datetime, UTC
 from typing import TypedDict
 from xml.etree import ElementTree
 
 import boto3
+import dacite
 import requests
 import yaml
 
-#   seo:
-#     canonical_url: https://demo.ecologie.data.gouv.fr
-#     # global metas injected
-#     meta:
-#       keywords:
-#       description:
-#       robots: 'noindex, nofollow'
-#     # robots.txt content (consumed by udata-front-kit-seo)
-#     robots_txt:
-#       disallow:
-#     # sitemap.xml content (consumed by udata-front-kit-seo)
-#     sitemap_xml:
-#       topics_pages:
-#         - bouquets
-#       datasets_pages:
-#         - indicators
-#       dataservices_pages:
 
+
+@dataclass
+class MetaConfig:
+    keywords: str | None = None
+    description: str | None = None
+    robots: str | None = None
+
+@dataclass
+class RobotsTxtConfig:
+    disallow: list[str] | None = None
+
+@dataclass
+class SitemapXmlConfig:
+    topics_pages: list[str] | None = None
+    datasets_pages: list[str] | None = None
+    dataservices_pages: list[str] | None = None
+    static_urls: list[str] | None = None
+
+@dataclass
+class SeoConfig:
+    canonical_url: str
+    meta: MetaConfig | None = None
+    sitemap_xml: SitemapXmlConfig | None = None
+    robots_txt: RobotsTxtConfig | None = None
+
+@dataclass
+class PageConfig:
+    universe_query: dict
+
+@dataclass
+class DatagouvfrConfig:
+    base_url: str
+
+@dataclass
+class WebsiteConfig:
+    seo: SeoConfig
+
+@dataclass
+class Config:
+    website: WebsiteConfig
+    datagouvfr: DatagouvfrConfig
+    pages: dict[str, PageConfig]
 
 
 class DeployEnv(StrEnum):
@@ -79,26 +105,34 @@ def fetch_urls() -> list[SitemapUrl]:
     if not r.ok:
         raise ValueError(f"Could not fetch config from {gh_url}")
 
-    config = yaml.safe_load(r.text)
-    seo_config = config["website"]["seo"]
+    config_dict = yaml.safe_load(r.text)
+    try:
+        config = dacite.from_dict(Config, config_dict)
+    except dacite.DaciteError as e:
+        print(f"❌ Error parsing conf for {gh_branch}: {e}")
+        return []
 
     print(f"-> site: {site!r}")
     print(f"-> config url: {gh_url!r}")
-    print(f"-> seo config:\n{yaml.dump(seo_config, default_flow_style=False, indent=2)}")
+    print(f"-> seo config:\n{yaml.dump(config_dict['website']['seo'], default_flow_style=False, indent=2)}")
 
-    site_url = seo_config["meta"]["canonical_url"]
+    site_url = config.website.seo.canonical_url
     print(f"-> base url: {site_url!r}")
 
-    datagouvfr_url = config["datagouvfr"]["base_url"]
+    datagouvfr_url = config.datagouvfr.base_url
     print(f"-> data.gouv.fr url: {datagouvfr_url!r}")
 
     results: list[SitemapUrl] = []
 
+    if not config.website.seo.sitemap_xml:
+        print("-> no sitemap.xml config, skipping")
+        return []
+
     # handle topics
     # TODO: make this a fn
-    for t_page in (seo_config["sitemap_xml"]["topics_pages"] or []):
+    for t_page in (config.website.seo.sitemap_xml.topics_pages or []):
         print(f"-> topic page: {t_page!r}")
-        query = config["pages"][t_page]["universe_query"]
+        query = config.pages[t_page].universe_query
         for topic in iter_pages(f"{datagouvfr_url}/api/2/topics/", params=query):
             results.append({
                 "url": f"{site_url}/{t_page}/{topic['slug']}",
@@ -106,9 +140,9 @@ def fetch_urls() -> list[SitemapUrl]:
             })
 
     # handle datasets
-    for t_page in (seo_config["sitemap_xml"]["datasets_pages"] or []):
+    for t_page in (config.website.seo.sitemap_xml.datasets_pages or []):
         print(f"-> dataset page: {t_page!r}")
-        query = config["pages"][t_page]["universe_query"]
+        query = config.pages[t_page].universe_query
         for topic in iter_pages(f"{datagouvfr_url}/api/2/datasets/", params=query):
             results.append({
                 "url": f"{site_url}/{t_page}/{topic['slug']}",
@@ -116,9 +150,9 @@ def fetch_urls() -> list[SitemapUrl]:
             })
 
     # handle dataservices
-    for t_page in (seo_config["sitemap_xml"]["dataservices_pages"] or []):
+    for t_page in (config.website.seo.sitemap_xml.dataservices_pages or []):
         print(f"-> dataservice page: {t_page!r}")
-        query = config["pages"][t_page]["universe_query"]
+        query = config.pages[t_page].universe_query
         for topic in iter_pages(f"{datagouvfr_url}/api/2/dataservices/", params=query):
             results.append({
                 "url": f"{site_url}/{t_page}/{topic['slug']}",
@@ -126,7 +160,7 @@ def fetch_urls() -> list[SitemapUrl]:
             })
 
     # handle static pages
-    for relative_url in (seo_config["sitemap_xml"]["static_urls"] or []):
+    for relative_url in (config.website.seo.sitemap_xml.static_urls or []):
         static_url = f"{site_url}{relative_url}"
         r = requests.get(static_url)
         r.raise_for_status()
