@@ -1,5 +1,7 @@
 import os
+from enum import StrEnum
 import email.utils
+import sys
 
 from datetime import datetime, UTC
 from typing import TypedDict
@@ -7,29 +9,32 @@ from xml.etree import ElementTree
 
 import boto3
 import requests
+import yaml
 
-ENV = os.getenv("ENV", "www")
-ECOSPHERES_URL = (
-    "https://demo.ecologie.data.gouv.fr"
-    if ENV == "demo"
-    else "https://ecologie.data.gouv.fr"
-)
-DATAGOUVFR_URL = f"https://{ENV}.data.gouv.fr/api"
-UNIVERSE_NAME = "ecospheres" if ENV == "demo" else "univers-ecospheres"
+#   seo:
+#     canonical_url: https://demo.ecologie.data.gouv.fr
+#     # global metas injected
+#     meta:
+#       keywords:
+#       description:
+#       robots: 'noindex, nofollow'
+#     # robots.txt content (consumed by udata-front-kit-seo)
+#     robots_txt:
+#       disallow:
+#     # sitemap.xml content (consumed by udata-front-kit-seo)
+#     sitemap_xml:
+#       topics_pages:
+#         - bouquets
+#       datasets_pages:
+#         - indicators
+#       dataservices_pages:
 
-INDICATEURS_ORG = "67884b4da4fca9c97bbef479"
-INDICATEURS_QUERY = {
-    "tag": "ecospheres-indicateurs",
-    "organization": INDICATEURS_ORG,
-}
 
-STATIC_URLS = [
-    "/",
-    "/bouquets",
-    "/indicators",
-    "/about",
-]
 
+class DeployEnv(StrEnum):
+    PROD = 'prod'
+    PREPROD = 'preprod'
+    DEMO = 'demo'
 
 class SitemapUrl(TypedDict):
     url: str
@@ -55,41 +60,88 @@ def iter_pages(first_url: str, params: dict = {}):
         url = data["next_page"]
 
 
+# TODO: move config parsing/setup to own function
 def fetch_urls() -> list[SitemapUrl]:
-    results = []
+    deploy_env = DeployEnv(os.getenv("ENV"))
+    print(f"-> env: {deploy_env.value!r}")
 
-    # static urls
-    for url in STATIC_URLS:
-        page_url = f"{ECOSPHERES_URL}{url}"
-        r = requests.get(page_url)
+    site = os.getenv("SITE")
+
+    if not site:
+        raise ValueError("SITE env var not set.")
+
+    gh_branch = f"{site}-{deploy_env}"
+    gh_url = f"https://raw.githubusercontent.com/opendatateam/udata-front-kit/refs/heads/{gh_branch}/configs/{site}/config.yaml"
+    # FIXME: test commit
+    gh_url = "https://raw.githubusercontent.com/opendatateam/udata-front-kit/f453959f0c8e44804bd65e90b6f3fc342d3962dd/configs/ecospheres/config.yaml"
+
+    r = requests.get(gh_url)
+    if not r.ok:
+        raise ValueError(f"Could not fetch config from {gh_url}")
+
+    config = yaml.safe_load(r.text)
+    seo_config = config["website"]["seo"]
+
+    print(f"-> site: {site!r}")
+    print(f"-> config url: {gh_url!r}")
+    print(f"-> seo config:\n{yaml.dump(seo_config, default_flow_style=False, indent=2)}")
+
+    site_url = seo_config["meta"]["canonical_url"]
+    print(f"-> base url: {site_url!r}")
+
+    datagouvfr_url = config["datagouvfr"]["base_url"]
+    print(f"-> data.gouv.fr url: {datagouvfr_url!r}")
+
+    results: list[SitemapUrl] = []
+
+    # handle topics
+    # TODO: make this a fn
+    for t_page in (seo_config["sitemap_xml"]["topics_pages"] or []):
+        print(f"-> topic page: {t_page!r}")
+        query = config["pages"][t_page]["universe_query"]
+        for topic in iter_pages(f"{datagouvfr_url}/api/2/topics/", params=query):
+            results.append({
+                "url": f"{site_url}/{t_page}/{topic['slug']}",
+                "last_modified": datetime.fromisoformat(topic["last_modified"]),
+            })
+
+    # handle datasets
+    for t_page in (seo_config["sitemap_xml"]["datasets_pages"] or []):
+        print(f"-> dataset page: {t_page!r}")
+        query = config["pages"][t_page]["universe_query"]
+        for topic in iter_pages(f"{datagouvfr_url}/api/2/datasets/", params=query):
+            results.append({
+                "url": f"{site_url}/{t_page}/{topic['slug']}",
+                "last_modified": datetime.fromisoformat(topic["last_modified"]),
+            })
+
+    # handle dataservices
+    for t_page in (seo_config["sitemap_xml"]["dataservices_pages"] or []):
+        print(f"-> dataservice page: {t_page!r}")
+        query = config["pages"][t_page]["universe_query"]
+        for topic in iter_pages(f"{datagouvfr_url}/api/2/dataservices/", params=query):
+            results.append({
+                "url": f"{site_url}/{t_page}/{topic['slug']}",
+                "last_modified": datetime.fromisoformat(topic["last_modified"]),
+            })
+
+    # handle static pages
+    for relative_url in (seo_config["sitemap_xml"]["static_urls"] or []):
+        static_url = f"{site_url}{relative_url}"
+        r = requests.get(static_url)
         r.raise_for_status()
         results.append({
-            "url": page_url,
+            "url": static_url,
             "last_modified": parse_http_date_with_tz(
                 r.headers['last-modified']
             ),
         })
 
-    # bouquets
-    for bouquet in iter_pages(f"{DATAGOUVFR_URL}/2/topics/", params={
-        "tag": UNIVERSE_NAME,
-    }):
-        results.append({
-            "url": f"{ECOSPHERES_URL}/bouquets/{bouquet['slug']}",
-            "last_modified": datetime.fromisoformat(bouquet["last_modified"]),
-        })
-
-    # indicators
-    for indicator in iter_pages(f"{DATAGOUVFR_URL}/2/datasets/", params=INDICATEURS_QUERY):
-        results.append({
-            "url": f"{ECOSPHERES_URL}/indicators/{indicator['id']}",
-            "last_modified": datetime.fromisoformat(indicator["last_modified"]),
-        })
-
     return results
 
 
-def create_sitemap(urls, write=True) -> str:
+# TODO: make this env/site compatible
+def create_sitemap(urls: list[SitemapUrl], write: bool = True) -> str:
     """Creates a sitemap XML from a list of URLs."""
     sitemap = ElementTree.Element("urlset", {
         "xmlns": "http://www.sitemaps.org/schemas/sitemap/0.9"
@@ -111,7 +163,7 @@ def create_sitemap(urls, write=True) -> str:
         return ElementTree.tostring(tree.getroot(), encoding="unicode") # type: ignore (wrong stubs)
 
 
-def generate(write=True) -> str:
+def generate(write: bool = True) -> str:
     urls = fetch_urls()
     res = create_sitemap(urls, write=write)
     if (s3_endpoint := os.getenv("AWS_ENDPOINT_URL")):
