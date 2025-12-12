@@ -86,8 +86,7 @@ def iter_pages(first_url: str, params: dict = {}):
         url = data["next_page"]
 
 
-# TODO: move config parsing/setup to own function
-def fetch_urls() -> list[SitemapUrl]:
+def parse_config() -> Config:
     deploy_env = DeployEnv(os.getenv("ENV"))
     print(f"-> env: {deploy_env.value!r}")
 
@@ -106,16 +105,16 @@ def fetch_urls() -> list[SitemapUrl]:
         raise ValueError(f"Could not fetch config from {gh_url}")
 
     config_dict = yaml.safe_load(r.text)
-    try:
-        config = dacite.from_dict(Config, config_dict)
-    except dacite.DaciteError as e:
-        print(f"❌ Error parsing conf for {gh_branch}: {e}")
-        return []
+    config = dacite.from_dict(Config, config_dict)
 
     print(f"-> site: {site!r}")
     print(f"-> config url: {gh_url!r}")
-    print(f"-> seo config:\n{yaml.dump(config_dict['website']['seo'], default_flow_style=False, indent=2)}")
+    print(f"-> seo config:\n{yaml.dump(config_dict["website"]["seo"], default_flow_style=False, indent=2)}")
 
+    return config
+
+
+def fetch_urls(config: Config) -> list[SitemapUrl]:
     site_url = config.website.seo.canonical_url
     print(f"-> base url: {site_url!r}")
 
@@ -198,7 +197,9 @@ def create_sitemap(urls: list[SitemapUrl], write: bool = True) -> str:
 
 
 def generate(write: bool = True) -> str:
-    urls = fetch_urls()
+    # this will fail naturally if config is not proper
+    config = parse_config()
+    urls = fetch_urls(config)
     res = create_sitemap(urls, write=write)
     if (s3_endpoint := os.getenv("AWS_ENDPOINT_URL")):
         bucket = os.getenv("AWS_ACCESS_KEY_ID")
