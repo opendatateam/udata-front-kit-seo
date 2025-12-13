@@ -1,5 +1,4 @@
 import os
-from dataclasses import dataclass
 from enum import StrEnum
 import email.utils
 
@@ -8,63 +7,20 @@ from typing import TypedDict
 from xml.etree import ElementTree
 
 import boto3
-import dacite
 import requests
-import yaml
 
+from config import parse_config, Config
 
-
-@dataclass
-class MetaConfig:
-    keywords: str | None = None
-    description: str | None = None
-    robots: str | None = None
-
-@dataclass
-class RobotsTxtConfig:
-    disallow: list[str] | None = None
-
-@dataclass
-class SitemapXmlConfig:
-    topics_pages: list[str] | None = None
-    datasets_pages: list[str] | None = None
-    dataservices_pages: list[str] | None = None
-    static_urls: list[str] | None = None
-
-@dataclass
-class SeoConfig:
-    canonical_url: str
-    meta: MetaConfig | None = None
-    sitemap_xml: SitemapXmlConfig | None = None
-    robots_txt: RobotsTxtConfig | None = None
-
-@dataclass
-class PageConfig:
-    universe_query: dict
-
-@dataclass
-class DatagouvfrConfig:
-    base_url: str
-
-@dataclass
-class WebsiteConfig:
-    seo: SeoConfig
-
-@dataclass
-class Config:
-    website: WebsiteConfig
-    datagouvfr: DatagouvfrConfig
-    pages: dict[str, PageConfig]
-
-
-class DeployEnv(StrEnum):
-    PROD = 'prod'
-    PREPROD = 'preprod'
-    DEMO = 'demo'
 
 class SitemapUrl(TypedDict):
     url: str
     last_modified: datetime
+
+
+class PageAPI(StrEnum):
+    topics_pages = "/topics"
+    datasets_pages = "/datasets"
+    dataservices_pages = "/dataservices"
 
 
 def parse_http_date_with_tz(http_date_str: str) -> datetime:
@@ -86,41 +42,20 @@ def iter_pages(first_url: str, params: dict = {}):
         url = data["next_page"]
 
 
-def parse_config() -> Config:
-    deploy_env = DeployEnv(os.getenv("ENV"))
-    print(f"-> env: {deploy_env.value!r}")
-
-    site = os.getenv("SITE")
-
-    if not site:
-        raise ValueError("SITE env var not set.")
-
-    gh_branch = f"{site}-{deploy_env}"
-    gh_url = f"https://raw.githubusercontent.com/opendatateam/udata-front-kit/refs/heads/{gh_branch}/configs/{site}/config.yaml"
-    # FIXME: test commit
-    gh_url = "https://raw.githubusercontent.com/opendatateam/udata-front-kit/f453959f0c8e44804bd65e90b6f3fc342d3962dd/configs/ecospheres/config.yaml"
-
-    r = requests.get(gh_url)
-    if not r.ok:
-        raise ValueError(f"Could not fetch config from {gh_url}")
-
-    config_dict = yaml.safe_load(r.text)
-    config = dacite.from_dict(Config, config_dict)
-
-    print(f"-> site: {site!r}")
-    print(f"-> config url: {gh_url!r}")
-    print(f"-> seo config:\n{yaml.dump(config_dict["website"]["seo"], default_flow_style=False, indent=2)}")
-
-    return config
+def fetch_urls_for_page(page_api: PageAPI, config: Config) -> list[SitemapUrl]:
+    results = []
+    for page in (getattr(config.website.seo.sitemap_xml, page_api.name) or []):
+        print(f"-> {page_api.name}: {page!r}")
+        query = config.pages[page].universe_query
+        for remote_object in iter_pages(f"{config.datagouvfr.base_url}/api/2/{page_api.value}/", params=query):
+            results.append({
+                "url": f"{config.website.seo.canonical_url}/{page}/{remote_object['slug']}",
+                "last_modified": datetime.fromisoformat(remote_object["last_modified"]),
+            })
+    return results
 
 
 def fetch_urls(config: Config) -> list[SitemapUrl]:
-    site_url = config.website.seo.canonical_url
-    print(f"-> base url: {site_url!r}")
-
-    datagouvfr_url = config.datagouvfr.base_url
-    print(f"-> data.gouv.fr url: {datagouvfr_url!r}")
-
     results: list[SitemapUrl] = []
 
     if not config.website.seo.sitemap_xml:
@@ -128,39 +63,17 @@ def fetch_urls(config: Config) -> list[SitemapUrl]:
         return []
 
     # handle topics
-    # TODO: make this a fn
-    for t_page in (config.website.seo.sitemap_xml.topics_pages or []):
-        print(f"-> topic page: {t_page!r}")
-        query = config.pages[t_page].universe_query
-        for topic in iter_pages(f"{datagouvfr_url}/api/2/topics/", params=query):
-            results.append({
-                "url": f"{site_url}/{t_page}/{topic['slug']}",
-                "last_modified": datetime.fromisoformat(topic["last_modified"]),
-            })
+    results += fetch_urls_for_page(PageAPI.topics_pages, config)
 
     # handle datasets
-    for t_page in (config.website.seo.sitemap_xml.datasets_pages or []):
-        print(f"-> dataset page: {t_page!r}")
-        query = config.pages[t_page].universe_query
-        for topic in iter_pages(f"{datagouvfr_url}/api/2/datasets/", params=query):
-            results.append({
-                "url": f"{site_url}/{t_page}/{topic['slug']}",
-                "last_modified": datetime.fromisoformat(topic["last_modified"]),
-            })
+    results += fetch_urls_for_page(PageAPI.datasets_pages, config)
 
     # handle dataservices
-    for t_page in (config.website.seo.sitemap_xml.dataservices_pages or []):
-        print(f"-> dataservice page: {t_page!r}")
-        query = config.pages[t_page].universe_query
-        for topic in iter_pages(f"{datagouvfr_url}/api/2/dataservices/", params=query):
-            results.append({
-                "url": f"{site_url}/{t_page}/{topic['slug']}",
-                "last_modified": datetime.fromisoformat(topic["last_modified"]),
-            })
+    results += fetch_urls_for_page(PageAPI.dataservices_pages, config)
 
     # handle static pages
     for relative_url in (config.website.seo.sitemap_xml.static_urls or []):
-        static_url = f"{site_url}{relative_url}"
+        static_url = f"{config.website.seo.canonical_url}{relative_url}"
         r = requests.get(static_url)
         r.raise_for_status()
         results.append({
