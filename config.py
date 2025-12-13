@@ -57,7 +57,7 @@ class Config:
     pages: dict[str, PageConfig]
 
 
-def parse_config() -> Config:
+def parse_config() -> tuple[Config, str]:
     deploy_env = DeployEnv(os.getenv("ENV"))
     print(f"-> env: {deploy_env.value!r}")
 
@@ -82,4 +82,9 @@ def parse_config() -> Config:
     print(f"-> config url: {gh_url!r}")
     print(f"-> seo config:\n{yaml.dump(config_dict["website"]["seo"], default_flow_style=False, indent=2)}")
 
-    return config
+    # use ecologie for ecospheres in the rest of the process
+    if site == "ecospheres":
+        site = "ecologie"
+
+    # config object, site/env path like ecologie/prod
+    return config, f"{site}/{deploy_env.value}"

@@ -3,6 +3,7 @@ from enum import StrEnum
 import email.utils
 
 from datetime import datetime, UTC
+from pathlib import Path
 from typing import TypedDict
 from xml.etree import ElementTree
 
@@ -72,6 +73,7 @@ def fetch_urls(config: Config) -> list[SitemapUrl]:
     results += fetch_urls_for_page(PageAPI.dataservices_pages, config)
 
     # handle static pages
+    # FIXME: compute from other attributes
     for relative_url in (config.website.seo.sitemap_xml.static_urls or []):
         static_url = f"{config.website.seo.canonical_url}{relative_url}"
         r = requests.get(static_url)
@@ -86,8 +88,7 @@ def fetch_urls(config: Config) -> list[SitemapUrl]:
     return results
 
 
-# TODO: make this env/site compatible
-def create_sitemap(urls: list[SitemapUrl], write: bool = True) -> str:
+def create_sitemap(urls: list[SitemapUrl], site_env_path: str) -> str | None:
     """Creates a sitemap XML from a list of URLs."""
     sitemap = ElementTree.Element("urlset", {
         "xmlns": "http://www.sitemaps.org/schemas/sitemap/0.9"
@@ -102,18 +103,15 @@ def create_sitemap(urls: list[SitemapUrl], write: bool = True) -> str:
 
     tree = ElementTree.ElementTree(sitemap)
     ElementTree.indent(tree)
-    if write:
-        tree.write("dist/sitemap.xml")
-        return ""
-    else:
-        return ElementTree.tostring(tree.getroot(), encoding="unicode") # type: ignore (wrong stubs)
+    Path(f"dist/{site_env_path}").mkdir(parents=True, exist_ok=True)
+    tree.write(f"dist/{site_env_path}/sitemap.xml")
 
 
-def generate(write: bool = True) -> str:
+def generate():
     # this will fail naturally if config is not proper
-    config = parse_config()
+    config, site_env_path = parse_config()
     urls = fetch_urls(config)
-    res = create_sitemap(urls, write=write)
+    create_sitemap(urls, site_env_path)
     if (s3_endpoint := os.getenv("AWS_ENDPOINT_URL")):
         bucket = os.getenv("AWS_ACCESS_KEY_ID")
         minio_client = boto3.client(
@@ -123,12 +121,11 @@ def generate(write: bool = True) -> str:
             aws_secret_access_key=os.getenv("AWS_SECRET_ACCESS_KEY"),
         )
         minio_client.upload_file(
-            Filename="dist/sitemap.xml",
+            Filename=f"dist/{site_env_path}/sitemap.xml",
             Bucket=bucket,
-            Key="sitemap.xml",
+            Key=f"{site_env_path}/sitemap.xml",
             ExtraArgs={'ContentType': 'application/xml; charset=utf-8'}
         )
-    return res
 
 
 if __name__ == "__main__":
