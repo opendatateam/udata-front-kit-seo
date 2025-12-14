@@ -20,9 +20,9 @@ class SitemapUrl(TypedDict):
 
 class PageAPI(StrEnum):
     """Maps config keys to API endpoints"""
-    topics_pages = "/topics"
-    datasets_pages = "/datasets"
-    dataservices_pages = "/dataservices"
+    topics_pages = "2/topics"
+    datasets_pages = "2/datasets"
+    dataservices_pages = "1/dataservices"
 
 
 def parse_http_date_with_tz(http_date_str: str) -> datetime:
@@ -49,7 +49,7 @@ def fetch_urls_for_page(page_api: PageAPI, config: Config) -> list[SitemapUrl]:
     for page in (getattr(config.website.seo.sitemap_xml, page_api.name) or []):
         print(f"-> {page_api.name}: {page!r}")
         query = config.pages[page].universe_query
-        for remote_object in iter_pages(f"{config.datagouvfr.base_url}/api/2/{page_api.value}/", params=query):
+        for remote_object in iter_pages(f"{config.datagouvfr.base_url}/api/{page_api.value}/", params=query):
             results.append({
                 "url": f"{config.website.seo.canonical_url}/{page}/{remote_object['slug']}",
                 "last_modified": datetime.fromisoformat(remote_object["last_modified"]),
