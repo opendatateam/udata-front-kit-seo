@@ -19,6 +19,7 @@ class SitemapUrl(TypedDict):
 
 
 class PageAPI(StrEnum):
+    """Maps config keys to API endpoints"""
     topics_pages = "/topics"
     datasets_pages = "/datasets"
     dataservices_pages = "/dataservices"
@@ -73,13 +74,20 @@ def fetch_urls(config: Config) -> list[SitemapUrl]:
     results += fetch_urls_for_page(PageAPI.dataservices_pages, config)
 
     # handle static pages
-    # FIXME: compute from other attributes
-    for relative_url in (config.website.seo.sitemap_xml.static_urls or []):
-        static_url = f"{config.website.seo.canonical_url}{relative_url}"
-        r = requests.get(static_url)
+    # 1. homepage
+    static_urls = ["/"]
+    # 2. static pages
+    static_urls += [p.route for p in config.website.router.static_pages or []]
+    # 3. objects list pages
+    for page_api in PageAPI:
+        pages = getattr(config.website.seo.sitemap_xml, page_api.name) or []
+        static_urls += [f"/{p}" for p in pages]
+    for relative_url in static_urls:
+        abs_url = f"{config.website.seo.canonical_url}{relative_url}"
+        r = requests.get(abs_url)
         r.raise_for_status()
         results.append({
-            "url": static_url,
+            "url": abs_url,
             "last_modified": parse_http_date_with_tz(
                 r.headers['last-modified']
             ),

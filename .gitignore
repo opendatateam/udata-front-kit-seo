@@ -1,1 +1,1 @@
-dist/*.xml
+dist/**/*.xml

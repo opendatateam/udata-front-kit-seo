@@ -47,8 +47,20 @@ class DatagouvfrConfig:
     base_url: str
 
 @dataclass
+class StaticPageConfig:
+    title: str
+    id: str
+    route: str
+    url: str
+
+@dataclass
+class RouterConfig:
+    static_pages: list[StaticPageConfig] | None
+
+@dataclass
 class WebsiteConfig:
     seo: SeoConfig
+    router: RouterConfig
 
 @dataclass
 class Config:
