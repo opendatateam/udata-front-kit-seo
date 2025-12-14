@@ -115,12 +115,38 @@ def create_sitemap(urls: list[SitemapUrl], site_env_path: str) -> str | None:
     tree.write(f"dist/{site_env_path}/sitemap.xml")
 
 
+def create_robots(config: Config, site_env_path: str, has_sitemap: bool = True):
+    """Creates a robots.txt file."""
+    content = "User-agent: *\n"
+
+    if config.website.seo.robots_txt:
+        disallow_lines = [f"Disallow: {path}" for path in config.website.seo.robots_txt.disallow or []]
+        content += '\n'.join(disallow_lines)
+
+    # TODO: has disallow / based on meta.robots contains noindex?
+
+    if has_sitemap:
+        content += f"\nSitemap: {config.website.seo.canonical_url}/sitemap.xml"
+
+    site_env_dir = Path(f"dist/{site_env_path}")
+    site_env_dir.mkdir(parents=True, exist_ok=True)
+
+    robots_file = site_env_dir / "robots.txt"
+    robots_file.write_text(content)
+
+
 def generate():
     # this will fail naturally if config is not proper
     config, site_env_path = parse_config()
     urls = fetch_urls(config)
-    create_sitemap(urls, site_env_path)
+    # TODO: or maybe keep the empty sitemap?
+    if urls:
+        create_sitemap(urls, site_env_path)
+        print(f"-> Created sitemap.xml with {len(urls)} urls")
+    create_robots(config, site_env_path, has_sitemap=bool(urls))
+    print("-> Created robots.txt")
     if (s3_endpoint := os.getenv("AWS_ENDPOINT_URL")):
+        print("-> Sending to S3")
         bucket = os.getenv("AWS_ACCESS_KEY_ID")
         minio_client = boto3.client(
             "s3",
@@ -128,12 +154,21 @@ def generate():
             aws_access_key_id=bucket,
             aws_secret_access_key=os.getenv("AWS_SECRET_ACCESS_KEY"),
         )
+        # TODO: what about removing/emptying?
+        if len(urls):
+            minio_client.upload_file(
+                Filename=f"dist/{site_env_path}/sitemap.xml",
+                Bucket=bucket,
+                Key=f"{site_env_path}/sitemap.xml",
+                ExtraArgs={'ContentType': 'application/xml; charset=utf-8'}
+            )
         minio_client.upload_file(
-            Filename=f"dist/{site_env_path}/sitemap.xml",
+            Filename=f"dist/{site_env_path}/robots.xml",
             Bucket=bucket,
-            Key=f"{site_env_path}/sitemap.xml",
+            Key=f"{site_env_path}/robots.xml",
             ExtraArgs={'ContentType': 'application/xml; charset=utf-8'}
         )
+        print("-> Sent to S3")
 
 
 if __name__ == "__main__":
