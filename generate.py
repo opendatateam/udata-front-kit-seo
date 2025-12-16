@@ -162,6 +162,14 @@ def generate():
             )
         print("-> Sent to S3")
 
+        # List bucket contents after upload
+        print(f"Listing contents of bucket '{bucket}':")
+        response = minio_client.list_objects_v2(Bucket=bucket)
+        if "Contents" in response:
+            for obj in response["Contents"]:
+                print(f"  - {obj["Key"]} (Size: {obj["Size"]} bytes, Modified: {obj["LastModified"]})")
+        else:
+            print("  No objects found in bucket")
 
 if __name__ == "__main__":
     generate()
