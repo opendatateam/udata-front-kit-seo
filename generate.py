@@ -143,11 +143,12 @@ def generate():
     print("-> Created robots.txt")
     if s3_endpoint := os.getenv("AWS_ENDPOINT_URL"):
         print("-> Sending to S3")
-        bucket = os.getenv("AWS_ACCESS_KEY_ID")
+        user = os.getenv("AWS_ACCESS_KEY_ID")
+        bucket = os.getenv("AWS_BUCKET", "ufk")
         minio_client = boto3.client(
             "s3",
             endpoint_url=s3_endpoint,
-            aws_access_key_id=bucket,
+            aws_access_key_id=user,
             aws_secret_access_key=os.getenv("AWS_SECRET_ACCESS_KEY"),
         )
         for seo_file, seo_file_ct in [
