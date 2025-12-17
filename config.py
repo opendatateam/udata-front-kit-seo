@@ -9,9 +9,9 @@ import yaml
 
 
 class DeployEnv(StrEnum):
-    PROD = 'prod'
-    PREPROD = 'preprod'
-    DEMO = 'demo'
+    PROD = "prod"
+    PREPROD = "preprod"
+    DEMO = "demo"
 
 
 @dataclass
