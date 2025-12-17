@@ -1,6 +1,6 @@
 import os
 
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass
 from enum import StrEnum
 
 import dacite
@@ -93,7 +93,7 @@ def parse_config() -> tuple[Config, str]:
 
     print(f"-> site: {site!r}")
     print(f"-> config url: {gh_url!r}")
-    print(f"-> seo config:\n{yaml.dump(config_dict["website"]["seo"], default_flow_style=False, indent=2)}")
+    print(f"-> seo config:\n{yaml.dump(asdict(config.website.seo), default_flow_style=False, indent=2)}")
 
     # use ecologie for ecospheres in the rest of the process
     if site == "ecospheres":
