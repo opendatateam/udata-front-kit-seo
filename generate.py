@@ -133,6 +133,43 @@ def create_robots(config: Config, site_env_path: str, has_sitemap: bool = True):
     robots_file.write_text(content)
 
 
+def send_to_s3(site_env_path: str):
+    s3_endpoint = os.getenv("AWS_ENDPOINT_URL")
+    if not s3_endpoint:
+        print("S3 not configured, skipping")
+        return
+
+    print("-> Sending to S3")
+    user = os.getenv("AWS_ACCESS_KEY_ID")
+    bucket = os.getenv("AWS_BUCKET", "ufk")
+    minio_client = boto3.client(
+        "s3",
+        endpoint_url=s3_endpoint,
+        aws_access_key_id=user,
+        aws_secret_access_key=os.getenv("AWS_SECRET_ACCESS_KEY"),
+    )
+    for seo_file, seo_file_ct in [
+        ("sitemap.xml", "application/xml"),
+        ("robots.txt", "text/plain"),
+    ]:
+        minio_client.upload_file(
+            Filename=f"dist/{site_env_path}/{seo_file}",
+            Bucket=bucket,
+            Key=f"{site_env_path}/{seo_file}",
+            ExtraArgs={'ContentType': f'{seo_file_ct}; charset=utf-8'}
+        )
+    print("-> Sent to S3")
+
+    # List bucket contents after upload
+    print(f"Listing contents of bucket '{bucket}':")
+    response = minio_client.list_objects_v2(Bucket=bucket)
+    if "Contents" in response:
+        for obj in response["Contents"]:
+            print(f"  - {obj["Key"]} (Size: {obj["Size"]} bytes, Modified: {obj["LastModified"]})")
+    else:
+        print("  No objects found in bucket")
+
+
 def generate():
     # this will fail naturally if config is not proper
     config, site_env_path = parse_config()
@@ -141,36 +178,8 @@ def generate():
     print(f"-> Created sitemap.xml with {len(urls)} urls")
     create_robots(config, site_env_path, has_sitemap=bool(urls))
     print("-> Created robots.txt")
-    if s3_endpoint := os.getenv("AWS_ENDPOINT_URL"):
-        print("-> Sending to S3")
-        user = os.getenv("AWS_ACCESS_KEY_ID")
-        bucket = os.getenv("AWS_BUCKET", "ufk")
-        minio_client = boto3.client(
-            "s3",
-            endpoint_url=s3_endpoint,
-            aws_access_key_id=user,
-            aws_secret_access_key=os.getenv("AWS_SECRET_ACCESS_KEY"),
-        )
-        for seo_file, seo_file_ct in [
-            ("sitemap.xml", "application/xml"),
-            ("robots.txt", "text/plain"),
-        ]:
-            minio_client.upload_file(
-                Filename=f"dist/{site_env_path}/{seo_file}",
-                Bucket=bucket,
-                Key=f"{site_env_path}/{seo_file}",
-                ExtraArgs={'ContentType': f'{seo_file_ct}; charset=utf-8'}
-            )
-        print("-> Sent to S3")
+    send_to_s3(site_env_path)
 
-        # List bucket contents after upload
-        print(f"Listing contents of bucket '{bucket}':")
-        response = minio_client.list_objects_v2(Bucket=bucket)
-        if "Contents" in response:
-            for obj in response["Contents"]:
-                print(f"  - {obj["Key"]} (Size: {obj["Size"]} bytes, Modified: {obj["LastModified"]})")
-        else:
-            print("  No objects found in bucket")
 
 if __name__ == "__main__":
     generate()
