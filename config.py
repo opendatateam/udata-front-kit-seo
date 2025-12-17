@@ -82,9 +82,11 @@ def parse_config() -> tuple[Config, str]:
     # FIXME: test commit
     gh_url = "https://raw.githubusercontent.com/opendatateam/udata-front-kit/f453959f0c8e44804bd65e90b6f3fc342d3962dd/configs/ecospheres/config.yaml"
 
-    r = requests.get(gh_url)
-    if not r.ok:
-        raise ValueError(f"Could not fetch config from {gh_url}")
+    try:
+        r = requests.get(gh_url)
+        r.raise_for_status()
+    except requests.RequestException as e:
+        raise ValueError(f"Could not fetch config from {gh_url}: {e}")
 
     config_dict = yaml.safe_load(r.text)
     config = dacite.from_dict(Config, config_dict)
