@@ -1,5 +1,6 @@
 import os
-from enum import StrEnum
+from dataclasses import dataclass
+from enum import Enum
 import email.utils
 
 from datetime import datetime, UTC
@@ -18,11 +19,16 @@ class SitemapUrl(TypedDict):
     last_modified: datetime
 
 
-class PageAPI(StrEnum):
-    """Maps config keys to API endpoints"""
-    topics_pages = "2/topics"
-    datasets_pages = "2/datasets"
-    dataservices_pages = "1/dataservices"
+@dataclass
+class PageEntry:
+    config_key: str
+    api_endpoint: str
+
+
+class PageAPI(PageEntry, Enum):
+    TOPIC = "topics_pages", "2/topics"
+    DATASET = "datasets_pages", "2/datasets"
+    DATASERVICE = "dataservices_pages", "1/dataservices"
 
 
 def parse_http_date_with_tz(http_date_str: str) -> datetime:
@@ -46,10 +52,10 @@ def iter_pages(first_url: str, params: dict = {}):
 
 def fetch_urls_for_page(page_api: PageAPI, config: Config) -> list[SitemapUrl]:
     results = []
-    for page in (getattr(config.website.seo.sitemap_xml, page_api.name) or []):
-        print(f"-> {page_api.name}: {page!r}")
+    for page in (getattr(config.website.seo.sitemap_xml, page_api.config_key) or []):
+        print(f"-> {page_api.config_key}: {page!r}")
         query = config.pages[page].universe_query
-        for remote_object in iter_pages(f"{config.datagouvfr.base_url}/api/{page_api.value}/", params=query):
+        for remote_object in iter_pages(f"{config.datagouvfr.base_url}/api/{page_api.api_endpoint}/", params=query):
             results.append({
                 "url": f"{config.website.seo.canonical_url}/{page}/{remote_object['slug']}",
                 "last_modified": datetime.fromisoformat(remote_object["last_modified"]),
@@ -66,13 +72,13 @@ def fetch_urls(config: Config) -> list[SitemapUrl]:
 
 
     # handle topics
-    results += fetch_urls_for_page(PageAPI.topics_pages, config)
+    results += fetch_urls_for_page(PageAPI.TOPIC, config)
 
     # handle datasets
-    results += fetch_urls_for_page(PageAPI.datasets_pages, config)
+    results += fetch_urls_for_page(PageAPI.DATASET, config)
 
     # handle dataservices
-    results += fetch_urls_for_page(PageAPI.dataservices_pages, config)
+    results += fetch_urls_for_page(PageAPI.DATASERVICE, config)
 
     # handle static pages
     # 1. homepage
@@ -81,7 +87,7 @@ def fetch_urls(config: Config) -> list[SitemapUrl]:
     static_urls += [p.route for p in config.website.router.static_pages or []]
     # 3. objects list pages
     for page_api in PageAPI:
-        pages = getattr(config.website.seo.sitemap_xml, page_api.name) or []
+        pages = getattr(config.website.seo.sitemap_xml, page_api.config_key) or []
         static_urls += [f"/{p}" for p in pages]
     for relative_url in static_urls:
         abs_url = f"{config.website.seo.canonical_url}{relative_url}"
