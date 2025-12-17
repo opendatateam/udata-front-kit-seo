@@ -58,11 +58,12 @@ def fetch_urls_for_page(page_api: PageAPI, config: Config) -> list[SitemapUrl]:
 
 
 def fetch_urls(config: Config) -> list[SitemapUrl]:
-    results: list[SitemapUrl] = []
-
     if not config.website.seo.sitemap_xml:
         print("-> no sitemap.xml config, skipping")
         return []
+
+    results: list[SitemapUrl] = []
+
 
     # handle topics
     results += fetch_urls_for_page(PageAPI.topics_pages, config)
