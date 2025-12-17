@@ -74,7 +74,6 @@ def parse_config() -> tuple[Config, str]:
     print(f"-> env: {deploy_env.value!r}")
 
     site = os.getenv("SITE")
-
     if not site:
         raise ValueError("SITE env var not set.")
 
