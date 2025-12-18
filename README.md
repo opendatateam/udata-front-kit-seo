@@ -1,22 +1,51 @@
-# ecospheres-sitemap
+# udata-front-kit-seo
 
-Génère le sitemap pour ecologie.data.gouv.fr en utilisant l'API publique de data.gouv.fr.
+Génère un `sitemap.xml` et un `robots.txt` pour un couple site (verticale) / environnement.
 
-- Récupère les `Topic` taggués `univers-ecospheres`.
-- Récupère les `Dataset` correspondant aux indicateurs territoriaux.
-- Construit un sitemap avec :
-    - les `Topic` récupérés plus haut, la date de dernière modification est celle du `Topic`,
-    - les `Dataset` récupérés plus haut, la date de dernière modification est celle du `Dataset`,
-    - les pages statiques indiquées dans `STATIC_URLS`, la date de dernière modification est celle du header `last-modified`.
-- Publie sur s3 le `sitemap.xml` si l'accès S3 est configuré.
+Utilise la configuration du site/env stockée sur le github de `udata-front-kit` pour récupérer les urls à inclure dans le `sitemap.xml` et les règles du `robots.txt`.
+
+Envoie les fichiers vers un bucket S3.
+
+Genère toujours un `sitemap.xml` (peut être une liste vide) et un `robots.txt`, sauf en cas de crash du script.
+
+## Configuration distante
+
+```yaml
+website:
+  seo:
+    canonical_url: https://site.data.gouv.fr
+    meta:
+      keywords: 'mots-clés, séparés, par, virgules'
+      description: 'Description du site'
+      robots: 'index, follow' # 'noindex, nofollow' pour demo/preprod
+    robots_txt:
+      disallow:
+        - /admin
+    sitemap_xml:
+      topics_pages:
+        - bouquets
+      datasets_pages:
+        - indicators
+      dataservices_pages:
+        - dataservices
+```
+
+## Variables d'environnement attendues
+
+- `ENV` : environnement cible `(demo|preprod|prod)`
+- `SITE` : site (verticale) cible. NB: `ecologie` translates to `ecospheres` internally.
+- `AWS_ACCESS_KEY_ID` : utilisateur S3
+- `AWS_SECRET_ACCESS_KEY` : mot de passe S3
+- `AWS_ENDPOINT_URL` : url S3
+- `AWS_BUCKET` : bucket S3 cible (défaut `ufk`)
 
 ## Exécution avec docker
 
 ```shell
-docker build -t ecospheres-sitemap .
-docker run -e ENV=demo -e AWS_ENDPOINT_URL=https://s3.example.com -e AWS_ACCESS_KEY_ID=key -e AWS_SECRET_ACCESS_KEY=secret ecospheres-sitemap
+docker build -t udata-front-kit-seo .
+docker run -e ENV=demo -e SITE=ecologie -e AWS_ENDPOINT_URL=https://s3.example.com -e AWS_ACCESS_KEY_ID=key -e AWS_SECRET_ACCESS_KEY=secret udata-front-kit-seo
 ```
 
 ## Déploiement
 
-Le script et son environnement d'exécution sont déployés par data.gouv.fr au déploiement de ecologie.data.gouv.fr.
+Le script et son environnement d'exécution sont déployés par data.gouv.fr.

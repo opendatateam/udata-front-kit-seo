@@ -143,7 +143,7 @@ def create_robots(config: Config, site_env_path: str, has_sitemap: bool = True):
 def send_to_s3(site_env_path: str):
     s3_endpoint = os.getenv("AWS_ENDPOINT_URL")
     if not s3_endpoint:
-        print("S3 not configured, skipping")
+        print("-> S3 not configured, skipping")
         return
 
     print("-> Sending to S3")
