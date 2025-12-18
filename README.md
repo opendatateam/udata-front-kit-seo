@@ -39,6 +39,21 @@ website:
 - `AWS_ENDPOINT_URL` : url S3
 - `AWS_BUCKET` : bucket S3 cible (défaut `ufk`)
 
+## Stockage S3
+
+Le stockage se fait sous cette forme :
+
+```
+ufk
+└── ecologie
+    ├── demo
+    │   ├── robots.txt
+    │   └── sitemap.xml
+    └── prod
+        ├── robots.txt
+        └── sitemap.xml
+```
+
 ## Exécution avec docker
 
 ```shell
