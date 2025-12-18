@@ -10,6 +10,8 @@ Genère toujours un `sitemap.xml` (peut être une liste vide) et un `robots.txt`
 
 ## Configuration distante
 
+Récupérée depuis `https://raw.githubusercontent.com/opendatateam/udata-front-kit/refs/heads/{site}-{env}/configs/{site}/config.yaml`.
+
 ```yaml
 website:
   seo:
