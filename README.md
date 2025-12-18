@@ -33,7 +33,7 @@ website:
 ## Variables d'environnement attendues
 
 - `ENV` : environnement cible `(demo|preprod|prod)`
-- `SITE` : site (verticale) cible. NB: `ecologie` translates to `ecospheres` internally.
+- `SITE` : site (verticale) cible. NB: `ecologie` est implicitement converti en `ecospheres` lorsque nécessaire.
 - `AWS_ACCESS_KEY_ID` : utilisateur S3
 - `AWS_SECRET_ACCESS_KEY` : mot de passe S3
 - `AWS_ENDPOINT_URL` : url S3
