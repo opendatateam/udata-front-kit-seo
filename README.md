@@ -40,6 +40,7 @@ website:
 - `AWS_SECRET_ACCESS_KEY` : mot de passe S3
 - `AWS_ENDPOINT_URL` : url S3
 - `AWS_BUCKET` : bucket S3 cible (défaut `ufk`)
+- `GIT_REF` : branche pour récupérer la config sur `udata-front-kit` (défaut `${site}-{env}`)
 
 ## Stockage S3
 
