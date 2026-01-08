@@ -168,7 +168,7 @@ def send_to_s3(site_env_path: str):
     print("-> Sent to S3")
 
     print(f"-> Listing contents of bucket '{bucket}':")
-    response = minio_client.list_objects_v2(Bucket=bucket)
+    response = minio_client.list_objects_v2(Bucket=bucket, Prefix=f"{site_env_path}/")
     if "Contents" in response:
         for obj in response["Contents"]:
             print(
