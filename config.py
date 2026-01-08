@@ -82,7 +82,8 @@ def parse_config() -> tuple[Config, str]:
     gh_site = site if site != "ecologie" else "ecospheres"
     print(f"-> gh_site: {gh_site!r}")
 
-    gh_branch = f"{gh_site}-{deploy_env}"
+    git_ref = os.getenv("GIT_REF")
+    gh_branch = f"{gh_site}-{deploy_env}" if not git_ref else git_ref
     gh_url = f"https://raw.githubusercontent.com/opendatateam/udata-front-kit/refs/heads/{gh_branch}/configs/{gh_site}/config.yaml"
     print(f"-> config url: {gh_url!r}")
 
