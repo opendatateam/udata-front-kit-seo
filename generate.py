@@ -149,7 +149,7 @@ def send_to_s3(site_env_path: str):
     print("-> Sending to S3")
     user = os.getenv("AWS_ACCESS_KEY_ID")
     bucket = os.getenv("AWS_BUCKET", "ufk")
-    minio_client = boto3.client(
+    s3_client = boto3.client(
         "s3",
         endpoint_url=s3_endpoint,
         aws_access_key_id=user,
@@ -159,16 +159,19 @@ def send_to_s3(site_env_path: str):
         ("sitemap.xml", "application/xml"),
         ("robots.txt", "text/plain"),
     ]:
-        minio_client.upload_file(
+        s3_client.upload_file(
             Filename=f"dist/{site_env_path}/{seo_file}",
             Bucket=bucket,
             Key=f"{site_env_path}/{seo_file}",
-            ExtraArgs={'ContentType': f'{seo_file_ct}; charset=utf-8'}
+            ExtraArgs={
+                'ContentType': f'{seo_file_ct}; charset=utf-8',
+                'ACL': 'public-read'
+            }
         )
     print("-> Sent to S3")
 
     print(f"-> Listing contents of bucket '{bucket}':")
-    response = minio_client.list_objects_v2(Bucket=bucket, Prefix=f"{site_env_path}/")
+    response = s3_client.list_objects_v2(Bucket=bucket, Prefix=f"{site_env_path}/")
     if "Contents" in response:
         for obj in response["Contents"]:
             print(
