@@ -40,7 +40,7 @@ class SeoConfig:
 
 @dataclass
 class PageConfig:
-    universe_query: dict
+    universe_query: dict | None = None
 
 @dataclass
 class DatagouvfrConfig:

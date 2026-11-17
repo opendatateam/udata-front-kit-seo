@@ -55,6 +55,9 @@ def fetch_urls_for_page(page_api: PageAPI, config: Config) -> list[SitemapUrl]:
     for page in (getattr(config.website.seo.sitemap_xml, page_api.config_key) or []):
         print(f"-> {page_api.config_key}: {page!r}")
         query = config.pages[page].universe_query
+        if query is None:
+            print(f"-> no universe_query for {page!r}, skipping objects listing")
+            continue
         for remote_object in iter_pages(f"{config.datagouvfr.base_url}/api/{page_api.api_endpoint}/", params=query):
             results.append({
                 "url": f"{config.website.seo.canonical_url}/{page}/{remote_object['slug']}",
